@@ -1,0 +1,1161 @@
+{
+  "name": "HelpDeskBot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "ed5d8b04-0e5f-4e05-a5ae-a78012a0d98a",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1824,
+        400
+      ],
+      "webhookId": "helpdeskbot-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "fMOhu74cizmyq7G3",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza el mensaje recibido y extrae los campos clave.\nconst msg = $input.first().json.message;\nconst telegram_user = String(msg.from.id);\nconst nombre_telegram = (msg.from.first_name || '') + (msg.from.last_name ? ' ' + msg.from.last_name : '');\nconst texto = (msg.text || '').trim();\nconst esComando = texto.startsWith('/');\nconst comando = esComando ? texto.split(' ')[0].toLowerCase() : '';\n\nreturn [{\n  json: {\n    telegram_user,\n    nombre_telegram,\n    texto,\n    esComando,\n    comando,\n    chat_id: msg.chat.id\n  }\n}];"
+      },
+      "id": "914eba1d-043c-449d-93f2-4b3b57076a82",
+      "name": "Normalizar Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 820572853,
+          "mode": "list",
+          "cachedResultName": "USUARIOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit#gid=820572853"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "telegram_user",
+              "lookupValue": "={{ $json.telegram_user }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7270ce55-f426-4819-8746-2d4f24cd08c9",
+      "name": "Buscar Usuario",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        -1376,
+        400
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verifica si el usuario existe y está activo.\n// Trae también la entrada original.\nconst entrada = $('Normalizar Input').first().json;\nconst usuarios = $input.all();\nconst usuario = usuarios.length > 0 ? usuarios[0].json : null;\n\nlet estado;\nif (!usuario || Object.keys(usuario).length === 0) {\n  estado = 'NO_REGISTRADO';\n} else if (String(usuario.activo).toUpperCase() === 'TRUE' || usuario.activo === true) {\n  estado = 'ACTIVO';\n} else {\n  estado = 'INACTIVO';\n}\n\nreturn [{\n  json: {\n    ...entrada,\n    usuario_estado: estado,\n    usuario_nombre: usuario ? usuario.nombre : entrada.nombre_telegram,\n    usuario_rol: usuario ? usuario.rol : 'usuario'\n  }\n}];"
+      },
+      "id": "0d5243dd-2d96-451a-b465-e987b79a353e",
+      "name": "Validar Usuario Activo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.usuario_estado }}",
+                    "rightValue": "ACTIVO",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Activo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.usuario_estado }}",
+                    "rightValue": "INACTIVO",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Inactivo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "28515330-bdfb-4bc8-97df-4a53cc1bc0b6",
+      "name": "Switch Acceso",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -944,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1132870299,
+          "mode": "list",
+          "cachedResultName": "SESIONES",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit#gid=1132870299"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "telegram_user",
+              "lookupValue": "={{ $json.telegram_user }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "971d1517-69f7-48e4-95ea-773c84953f2a",
+      "name": "Leer Sesión",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        -720,
+        304
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// MOTOR CONVERSACIONAL - HELPDESKBOT\n// Decide la siguiente pantalla y arma la respuesta\n// ============================================================\nconst entrada = $('Validar Usuario Activo').first().json;\nconst sesiones = $input.all();\nconst sesionActual = (sesiones.length > 0 && Object.keys(sesiones[0].json).length > 0) ? sesiones[0].json : null;\n\nconst pantalla = sesionActual ? (sesionActual.pantalla_actual || 'MENU_PRINCIPAL') : 'MENU_PRINCIPAL';\nlet datos = {};\ntry {\n  datos = sesionActual && sesionActual.datos_temporales ? JSON.parse(sesionActual.datos_temporales) : {};\n} catch (e) {\n  datos = {};\n}\n\nconst texto = entrada.texto;\nconst esComando = entrada.esComando;\nconst comando = entrada.comando;\n\n// ----------- HELPERS DE MENSAJES -----------\nconst MSG_BIENVENIDA = `Hola, soy HelpDeskBot 👋\\n\\nEstoy aquí para ayudarte con solicitudes de soporte\\nde forma rápida y ordenada.\\n\\nPor favor escribe el número de la opción que quieras usar.\\n\\nMenú principal:\\n0. Ayuda\\n1. Crear solicitud\\n2. Consultar estado de solicitud\\n3. Mis solicitudes\\n4. Reportes\\n5. Configuración`;\n\nconst MSG_AYUDA = `ℹ️ Ayuda\\n\\nEnvía el número de la opción que quieras usar.\\nEn cualquier menú puedes escribir 9 para cancelar.\\nUsa /start si te pierdes y quieres volver al inicio.`;\n\nconst MSG_TIPO = `Vamos a crear una solicitud, para lo cual se necesitará de escoger su tipo.\\n\\nSelecciona el tipo:\\n1. Soporte técnico\\n2. Solicitud administrativa\\n3. Consulta general\\n9. Cancelar`;\n\nconst MSG_PRIORIDAD = `¿Qué tan urgente es tu solicitud?\\n\\n1. Alta\\n2. Media\\n3. Baja\\n9. Cancelar`;\n\nconst MSG_DESCRIPCION = `Por favor describe brevemente tu solicitud.\\n(Mínimo 10 caracteres, máximo 500.)\\n\\nEscribe \"cancelar\" si deseas abortar.`;\n\nconst confirmacionMsg = (d) => `Por favor revisa los datos de tu solicitud:\\n\\nTipo: ${d.tipo}\\nPrioridad: ${d.prioridad}\\nDescripción: ${d.descripcion}\\n\\n1. Confirmar y registrar\\n9. Cancelar`;\n\n// ----------- COMANDOS GLOBALES -----------\n// /start o /menu fuerzan el regreso al menú principal\nif (esComando && (comando === '/start' || comando === '/menu' || comando === '/inicio')) {\n  return [{\n    json: {\n      accion: 'RESPONDER_Y_GUARDAR_SESION',\n      chat_id: entrada.chat_id,\n      telegram_user: entrada.telegram_user,\n      mensaje: MSG_BIENVENIDA,\n      nueva_pantalla: 'MENU_PRINCIPAL',\n      nuevos_datos: '{}',\n      log_pantalla: pantalla,\n      log_opcion: texto,\n      log_resultado: 'OK'\n    }\n  }];\n}\n\nif (esComando && comando === '/ayuda') {\n  return [{\n    json: {\n      accion: 'RESPONDER_Y_GUARDAR_SESION',\n      chat_id: entrada.chat_id,\n      telegram_user: entrada.telegram_user,\n      mensaje: MSG_AYUDA,\n      nueva_pantalla: 'MENU_PRINCIPAL',\n      nuevos_datos: '{}',\n      log_pantalla: pantalla,\n      log_opcion: texto,\n      log_resultado: 'OK'\n    }\n  }];\n}\n\n// Cancelación universal en cualquier pantalla del wizard\nif (texto === '9' || texto.toLowerCase() === 'cancelar') {\n  if (pantalla.startsWith('CREAR_') || pantalla === 'CONSULTAR_TICKET') {\n    return [{\n      json: {\n        accion: 'RESPONDER_Y_GUARDAR_SESION',\n        chat_id: entrada.chat_id,\n        telegram_user: entrada.telegram_user,\n        mensaje: '❌ Operación cancelada.\\n\\n' + MSG_BIENVENIDA,\n        nueva_pantalla: 'MENU_PRINCIPAL',\n        nuevos_datos: '{}',\n        log_pantalla: pantalla,\n        log_opcion: texto,\n        log_resultado: 'CANCELADO'\n      }\n    }];\n  }\n}\n\n// ----------- MÁQUINA DE ESTADOS -----------\n\n// PANTALLA: MENU_PRINCIPAL\nif (pantalla === 'MENU_PRINCIPAL') {\n  switch (texto) {\n    case '0':\n      return [{ json: {\n        accion: 'RESPONDER_Y_GUARDAR_SESION',\n        chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n        mensaje: MSG_AYUDA, nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n        log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n      }}];\n    case '1':\n      return [{ json: {\n        accion: 'RESPONDER_Y_GUARDAR_SESION',\n        chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n        mensaje: MSG_TIPO, nueva_pantalla: 'CREAR_TIPO', nuevos_datos: '{}',\n        log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n      }}];\n    case '2':\n      return [{ json: {\n        accion: 'RESPONDER_Y_GUARDAR_SESION',\n        chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n        mensaje: 'Por favor envíame el ID del ticket (formato HD-YYYYMMDD-NNNN):',\n        nueva_pantalla: 'CONSULTAR_TICKET', nuevos_datos: '{}',\n        log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n      }}];\n    case '3':\n      return [{ json: {\n        accion: 'LISTAR_MIS_SOLICITUDES',\n        chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n        nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n        log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n      }}];\n    case '4':\n      return [{ json: {\n        accion: 'GENERAR_REPORTE',\n        chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n        nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n        log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n      }}];\n    case '5':\n      return [{ json: {\n        accion: 'RESPONDER_Y_GUARDAR_SESION',\n        chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n        mensaje: `⚙️ Configuración\\n\\nUsuario: ${entrada.usuario_nombre}\\nRol: ${entrada.usuario_rol}\\n\\nLa edición de configuración se realiza desde el panel administrativo.\\n\\nEnvía /start para volver al menú.`,\n        nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n        log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n      }}];\n    default:\n      return [{ json: {\n        accion: 'RESPONDER_Y_GUARDAR_SESION',\n        chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n        mensaje: '⚠️ Opción no reconocida.\\n\\n' + MSG_BIENVENIDA,\n        nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n        log_pantalla: pantalla, log_opcion: texto, log_resultado: 'ERROR_VALIDACION'\n      }}];\n  }\n}\n\n// PANTALLA: CREAR_TIPO\nif (pantalla === 'CREAR_TIPO') {\n  const tipos = { '1': 'Soporte técnico', '2': 'Solicitud administrativa', '3': 'Consulta general' };\n  if (tipos[texto]) {\n    datos.tipo = tipos[texto];\n    return [{ json: {\n      accion: 'RESPONDER_Y_GUARDAR_SESION',\n      chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n      mensaje: MSG_PRIORIDAD, nueva_pantalla: 'CREAR_PRIORIDAD',\n      nuevos_datos: JSON.stringify(datos),\n      log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n    }}];\n  }\n  return [{ json: {\n    accion: 'RESPONDER_Y_GUARDAR_SESION',\n    chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n    mensaje: '⚠️ Opción inválida.\\n\\n' + MSG_TIPO,\n    nueva_pantalla: 'CREAR_TIPO', nuevos_datos: JSON.stringify(datos),\n    log_pantalla: pantalla, log_opcion: texto, log_resultado: 'ERROR_VALIDACION'\n  }}];\n}\n\n// PANTALLA: CREAR_PRIORIDAD\nif (pantalla === 'CREAR_PRIORIDAD') {\n  const prioridades = { '1': 'Alta', '2': 'Media', '3': 'Baja' };\n  if (prioridades[texto]) {\n    datos.prioridad = prioridades[texto];\n    return [{ json: {\n      accion: 'RESPONDER_Y_GUARDAR_SESION',\n      chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n      mensaje: MSG_DESCRIPCION, nueva_pantalla: 'CREAR_DESCRIPCION',\n      nuevos_datos: JSON.stringify(datos),\n      log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n    }}];\n  }\n  return [{ json: {\n    accion: 'RESPONDER_Y_GUARDAR_SESION',\n    chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n    mensaje: '⚠️ Prioridad inválida.\\n\\n' + MSG_PRIORIDAD,\n    nueva_pantalla: 'CREAR_PRIORIDAD', nuevos_datos: JSON.stringify(datos),\n    log_pantalla: pantalla, log_opcion: texto, log_resultado: 'ERROR_VALIDACION'\n  }}];\n}\n\n// PANTALLA: CREAR_DESCRIPCION\nif (pantalla === 'CREAR_DESCRIPCION') {\n  const descripcion = texto;\n  if (descripcion.length < 10 || descripcion.length > 500) {\n    return [{ json: {\n      accion: 'RESPONDER_Y_GUARDAR_SESION',\n      chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n      mensaje: `⚠️ La descripción debe tener entre 10 y 500 caracteres (recibí ${descripcion.length}).\\n\\n${MSG_DESCRIPCION}`,\n      nueva_pantalla: 'CREAR_DESCRIPCION', nuevos_datos: JSON.stringify(datos),\n      log_pantalla: pantalla, log_opcion: '<descripcion>', log_resultado: 'ERROR_VALIDACION'\n    }}];\n  }\n  datos.descripcion = descripcion;\n  return [{ json: {\n    accion: 'RESPONDER_Y_GUARDAR_SESION',\n    chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n    mensaje: confirmacionMsg(datos),\n    nueva_pantalla: 'CREAR_CONFIRMACION', nuevos_datos: JSON.stringify(datos),\n    log_pantalla: pantalla, log_opcion: '<descripcion>', log_resultado: 'OK'\n  }}];\n}\n\n// PANTALLA: CREAR_CONFIRMACION\nif (pantalla === 'CREAR_CONFIRMACION') {\n  if (texto === '1') {\n    return [{ json: {\n      accion: 'GUARDAR_TICKET',\n      chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n      datos_ticket: datos,\n      nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n      log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n    }}];\n  }\n  return [{ json: {\n    accion: 'RESPONDER_Y_GUARDAR_SESION',\n    chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n    mensaje: '⚠️ Opción inválida. Responde 1 para confirmar o 9 para cancelar.\\n\\n' + confirmacionMsg(datos),\n    nueva_pantalla: 'CREAR_CONFIRMACION', nuevos_datos: JSON.stringify(datos),\n    log_pantalla: pantalla, log_opcion: texto, log_resultado: 'ERROR_VALIDACION'\n  }}];\n}\n\n// PANTALLA: CONSULTAR_TICKET\nif (pantalla === 'CONSULTAR_TICKET') {\n  const idTicket = texto.toUpperCase();\n  if (!/^HD-\\d{8}-\\d{4}$/.test(idTicket)) {\n    return [{ json: {\n      accion: 'RESPONDER_Y_GUARDAR_SESION',\n      chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n      mensaje: '⚠️ Formato inválido. El ID debe ser tipo HD-20260427-0034.\\n\\nEscribe 9 para cancelar.',\n      nueva_pantalla: 'CONSULTAR_TICKET', nuevos_datos: '{}',\n      log_pantalla: pantalla, log_opcion: texto, log_resultado: 'ERROR_VALIDACION'\n    }}];\n  }\n  return [{ json: {\n    accion: 'CONSULTAR_TICKET',\n    chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n    id_ticket: idTicket,\n    nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n    log_pantalla: pantalla, log_opcion: texto, log_resultado: 'OK'\n  }}];\n}\n\n// FALLBACK\nreturn [{ json: {\n  accion: 'RESPONDER_Y_GUARDAR_SESION',\n  chat_id: entrada.chat_id, telegram_user: entrada.telegram_user,\n  mensaje: MSG_BIENVENIDA, nueva_pantalla: 'MENU_PRINCIPAL', nuevos_datos: '{}',\n  log_pantalla: pantalla, log_opcion: texto, log_resultado: 'ERROR_SISTEMA'\n}}];"
+      },
+      "id": "46bb06d1-1e17-4cae-b593-4f10295a76de",
+      "name": "Motor Conversacional",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "GUARDAR_TICKET",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "GuardarTicket"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "CONSULTAR_TICKET",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ConsultarTicket"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "LISTAR_MIS_SOLICITUDES",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ListarMis"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "GENERAR_REPORTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reporte"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1cb9fbdc-8976-4c49-a146-7bf184b2f27e",
+      "name": "Switch Acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2072347920,
+          "mode": "list",
+          "cachedResultName": "SOLICITUDES",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit#gid=2072347920"
+        },
+        "options": {}
+      },
+      "id": "20253131-af7b-41fa-bbf9-a30832bd2631",
+      "name": "Leer Solicitudes (para ID)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Genera el id_ticket consecutivo del día\nconst datos = $('Motor Conversacional').first().json;\nconst entrada = $('Validar Usuario Activo').first().json;\nconst solicitudes = $input.all().map(i => i.json);\n\nconst hoy = new Date();\nconst yyyy = hoy.getFullYear();\nconst mm = String(hoy.getMonth() + 1).padStart(2, '0');\nconst dd = String(hoy.getDate()).padStart(2, '0');\nconst fechaStr = `${yyyy}${mm}${dd}`;\n\n// Contar tickets del día actual\nconst delDia = solicitudes.filter(s => s.id_ticket && s.id_ticket.startsWith(`HD-${fechaStr}`));\nconst consecutivo = String(delDia.length + 1).padStart(4, '0');\nconst idTicket = `HD-${fechaStr}-${consecutivo}`;\n\nconst fechaCreacion = hoy.toISOString();\n\nreturn [{\n  json: {\n    id_ticket: idTicket,\n    tipo: datos.datos_ticket.tipo,\n    prioridad: datos.datos_ticket.prioridad,\n    descripcion: datos.datos_ticket.descripcion,\n    estado: 'Abierto',\n    creado_por: entrada.telegram_user,\n    fecha_creacion: fechaCreacion,\n    chat_id: datos.chat_id,\n    telegram_user: datos.telegram_user,\n    log_pantalla: datos.log_pantalla,\n    log_opcion: datos.log_opcion,\n    log_resultado: datos.log_resultado,\n    nueva_pantalla: datos.nueva_pantalla,\n    nuevos_datos: datos.nuevos_datos\n  }\n}];"
+      },
+      "id": "a1610972-efe4-4f7c-937c-4fceaef949ed",
+      "name": "Generar ID Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "SOLICITUDES",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_ticket": "={{ $json.id_ticket }}",
+            "tipo": "={{ $json.tipo }}",
+            "prioridad": "={{ $json.prioridad }}",
+            "descripcion": "={{ $json.descripcion }}",
+            "estado": "={{ $json.estado }}",
+            "creado_por": "={{ $json.creado_por }}",
+            "fecha_creacion": "={{ $json.fecha_creacion }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id_ticket",
+              "displayName": "id_ticket",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tipo",
+              "displayName": "tipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prioridad",
+              "displayName": "prioridad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "descripcion",
+              "displayName": "descripcion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "creado_por",
+              "displayName": "creado_por",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fecha_creacion",
+              "displayName": "fecha_creacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d0f30892-720f-4208-9c94-c12ff03c9b7c",
+      "name": "Guardar Ticket",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construye el mensaje de éxito y propaga el contexto\nconst t = $input.first().json;\nconst mensaje = `✅ Solicitud registrada con éxito.\\n\\nID: ${t.id_ticket}\\nEstado: ${t.estado}\\n\\nTe notificaremos cuando haya cambios.\\n\\nEscribe /start para volver al menú principal.`;\nreturn [{\n  json: {\n    chat_id: t.chat_id,\n    telegram_user: t.telegram_user,\n    mensaje,\n    nueva_pantalla: 'MENU_PRINCIPAL',\n    nuevos_datos: '{}',\n    log_pantalla: t.log_pantalla,\n    log_opcion: t.log_opcion,\n    log_resultado: t.log_resultado\n  }\n}];"
+      },
+      "id": "c9ce8397-e06e-45c0-975d-589e59521116",
+      "name": "Preparar Respuesta Éxito",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2072347920,
+          "mode": "list",
+          "cachedResultName": "SOLICITUDES",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit#gid=2072347920"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "id_ticket",
+              "lookupValue": "={{ $json.id_ticket }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "608e27e4-5193-4e0c-bb57-a185d1cef637",
+      "name": "Buscar Ticket",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        192
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatea la respuesta de consulta de ticket\nconst datos = $('Motor Conversacional').first().json;\nconst resultados = $input.all();\nconst ticket = (resultados.length > 0 && Object.keys(resultados[0].json).length > 0) ? resultados[0].json : null;\n\nlet mensaje;\nif (!ticket) {\n  mensaje = `❌ No se encontró el ticket ${datos.id_ticket}.\\n\\nVerifica el ID e intenta de nuevo.\\nEscribe /start para volver al menú.`;\n} else {\n  mensaje = `🎫 Ticket ${ticket.id_ticket}\\n\\nTipo: ${ticket.tipo}\\nPrioridad: ${ticket.prioridad}\\nEstado: ${ticket.estado}\\nCreado: ${ticket.fecha_creacion}\\n\\nDescripción: ${ticket.descripcion}\\n\\nEscribe /start para volver al menú.`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    telegram_user: datos.telegram_user,\n    mensaje,\n    nueva_pantalla: 'MENU_PRINCIPAL',\n    nuevos_datos: '{}',\n    log_pantalla: datos.log_pantalla,\n    log_opcion: datos.log_opcion,\n    log_resultado: ticket ? 'OK' : 'ERROR_VALIDACION'\n  }\n}];"
+      },
+      "id": "c14adc20-a43f-4aa4-9974-18034b8cfbfd",
+      "name": "Formatear Consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2072347920,
+          "mode": "list",
+          "cachedResultName": "SOLICITUDES",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit#gid=2072347920"
+        },
+        "options": {}
+      },
+      "id": "41e0c74b-8575-4d3f-a252-0af71b08ad75",
+      "name": "Leer Mis Solicitudes",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        368
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtra los tickets del usuario y arma listado\nconst datos = $('Motor Conversacional').first().json;\nconst todos = $input.all().map(i => i.json);\nconst mios = todos.filter(t => String(t.creado_por) === String(datos.telegram_user));\n\nlet mensaje;\nif (mios.length === 0) {\n  mensaje = `📋 No tienes solicitudes registradas.\\n\\nEscribe /start para volver al menú.`;\n} else {\n  // Ordenar más recientes primero\n  mios.sort((a, b) => (b.fecha_creacion || '').localeCompare(a.fecha_creacion || ''));\n  const lineas = mios.slice(0, 10).map(t => `• ${t.id_ticket} [${t.estado}] ${t.tipo} - ${t.prioridad}`);\n  mensaje = `📋 Tus solicitudes (últimas ${Math.min(mios.length, 10)}):\\n\\n${lineas.join('\\n')}\\n\\nEscribe /start para volver al menú.`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    telegram_user: datos.telegram_user,\n    mensaje,\n    nueva_pantalla: 'MENU_PRINCIPAL',\n    nuevos_datos: '{}',\n    log_pantalla: datos.log_pantalla,\n    log_opcion: datos.log_opcion,\n    log_resultado: 'OK'\n  }\n}];"
+      },
+      "id": "288d78cb-7526-4543-86b0-cc5a5f720f7d",
+      "name": "Formatear Mis Solicitudes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2072347920,
+          "mode": "list",
+          "cachedResultName": "SOLICITUDES",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit#gid=2072347920"
+        },
+        "options": {}
+      },
+      "id": "b8bef658-a083-47a1-a1c0-12fd32b878b0",
+      "name": "Leer Para Reporte",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        544
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Genera reporte agrupado por estado y tipo\nconst datos = $('Motor Conversacional').first().json;\nconst todos = $input.all().map(i => i.json).filter(t => t.id_ticket);\n\nconst porEstado = {};\nconst porTipo = {};\nconst porPrioridad = {};\n\ntodos.forEach(t => {\n  porEstado[t.estado] = (porEstado[t.estado] || 0) + 1;\n  porTipo[t.tipo] = (porTipo[t.tipo] || 0) + 1;\n  porPrioridad[t.prioridad] = (porPrioridad[t.prioridad] || 0) + 1;\n});\n\nconst formatGrupo = (obj) => Object.entries(obj).map(([k, v]) => `  • ${k}: ${v}`).join('\\n') || '  (sin datos)';\n\nconst mensaje = `📊 Reporte de solicitudes\\n\\nTotal: ${todos.length}\\n\\nPor estado:\\n${formatGrupo(porEstado)}\\n\\nPor tipo:\\n${formatGrupo(porTipo)}\\n\\nPor prioridad:\\n${formatGrupo(porPrioridad)}\\n\\nEscribe /start para volver al menú.`;\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    telegram_user: datos.telegram_user,\n    mensaje,\n    nueva_pantalla: 'MENU_PRINCIPAL',\n    nuevos_datos: '{}',\n    log_pantalla: datos.log_pantalla,\n    log_opcion: datos.log_opcion,\n    log_resultado: 'OK'\n  }\n}];"
+      },
+      "id": "d3acbe60-dc05-4319-8153-ae8e6ddf4c41",
+      "name": "Formatear Reporte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "SESIONES",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_user": "={{ $json.telegram_user }}",
+            "pantalla_actual": "={{ $json.nueva_pantalla }}",
+            "datos_temporales": "={{ $json.nuevos_datos }}",
+            "ultima_actualizacion": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "telegram_user"
+          ],
+          "schema": [
+            {
+              "id": "telegram_user",
+              "displayName": "telegram_user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pantalla_actual",
+              "displayName": "pantalla_actual",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "datos_temporales",
+              "displayName": "datos_temporales",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ultima_actualizacion",
+              "displayName": "ultima_actualizacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "57319753-ccd1-4f74-a773-46355f1d7cf1",
+      "name": "Actualizar Sesión",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        960,
+        288
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "id": "19316b46-adc5-4c3f-b34c-e30fb1282222",
+      "name": "Enviar Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        288
+      ],
+      "webhookId": "32bf80fb-75f1-4456-bc69-c1fb5a14dfb4",
+      "credentials": {
+        "telegramApi": {
+          "id": "fMOhu74cizmyq7G3",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s",
+          "mode": "list",
+          "cachedResultName": "HelpDeskBot_DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xPpFRPYbRKJg8diMtcGD7e3uM9bQIluZ_vs9J5Kw90s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "LOGS",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ new Date().toISOString() }}",
+            "telegram_user": "={{ $json.telegram_user }}",
+            "pantalla": "={{ $json.log_pantalla }}",
+            "opcion": "={{ $json.log_opcion }}",
+            "resultado": "={{ $json.log_resultado }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telegram_user",
+              "displayName": "telegram_user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pantalla",
+              "displayName": "pantalla",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "opcion",
+              "displayName": "opcion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resultado",
+              "displayName": "resultado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f69001c-ca5e-4287-8d38-9a057ab7f48d",
+      "name": "Registrar Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1440,
+        288
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "owl5eFujQOGBFQU4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalizar Input').first().json.chat_id }}",
+        "text": "🚫 Tu cuenta está desactivada o no tienes permisos para usar HelpDeskBot.\n\nPor favor contacta al administrador.",
+        "additionalFields": {}
+      },
+      "id": "50ed2a8c-40c8-40a1-abb4-e626fd5a3c4b",
+      "name": "Rechazar Inactivo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -720,
+        528
+      ],
+      "webhookId": "293fb8de-2b9b-4e4f-b775-7792a2c7b182",
+      "credentials": {
+        "telegramApi": {
+          "id": "fMOhu74cizmyq7G3",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalizar Input').first().json.chat_id }}",
+        "text": "👋 Hola. No estás registrado en HelpDeskBot.\n\nPor favor solicita al administrador que te dé de alta antes de usar este servicio.",
+        "additionalFields": {}
+      },
+      "id": "2cd5f984-902a-4ea3-bfef-8f35dc4e3c2e",
+      "name": "Rechazar No Registrado",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -720,
+        688
+      ],
+      "webhookId": "3e095820-57a2-44a4-9d4c-b645c204e9ca",
+      "credentials": {
+        "telegramApi": {
+          "id": "fMOhu74cizmyq7G3",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Input": {
+      "main": [
+        [
+          {
+            "node": "Buscar Usuario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Usuario": {
+      "main": [
+        [
+          {
+            "node": "Validar Usuario Activo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Usuario Activo": {
+      "main": [
+        [
+          {
+            "node": "Switch Acceso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Acceso": {
+      "main": [
+        [
+          {
+            "node": "Leer Sesión",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rechazar Inactivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Sesión": {
+      "main": [
+        [
+          {
+            "node": "Motor Conversacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Motor Conversacional": {
+      "main": [
+        [
+          {
+            "node": "Switch Acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Acción": {
+      "main": [
+        [
+          {
+            "node": "Leer Solicitudes (para ID)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buscar Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer Mis Solicitudes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer Para Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Solicitudes (para ID)": {
+      "main": [
+        [
+          {
+            "node": "Generar ID Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar ID Ticket": {
+      "main": [
+        [
+          {
+            "node": "Guardar Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Ticket": {
+      "main": [
+        [
+          {
+            "node": "Preparar Respuesta Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Respuesta Éxito": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Ticket": {
+      "main": [
+        [
+          {
+            "node": "Formatear Consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Consulta": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Mis Solicitudes": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mis Solicitudes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mis Solicitudes": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Para Reporte": {
+      "main": [
+        [
+          {
+            "node": "Formatear Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Reporte": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Sesión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Sesión": {
+      "main": [
+        [
+          {
+            "node": "Enviar Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Telegram": {
+      "main": [
+        [
+          {
+            "node": "Registrar Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "93a0de1b-8fb0-46a3-bff6-0e1e8d7d4429",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0444fcd2ddb6fefee0e894504c21f9cd97e36f0a1335838e159b1a7139257bcb"
+  },
+  "id": "9ylcqtCnXkPMVGpQ",
+  "tags": [
+    {
+      "updatedAt": "2026-04-28T02:35:52.181Z",
+      "createdAt": "2026-04-28T02:35:52.181Z",
+      "id": "GE1wE8rGt8D981xc",
+      "name": "HelpDesk"
+    }
+  ]
+}
